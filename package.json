@@ -1,0 +1,23 @@
+{
+  "name": "webrtc-signaling-server",
+  "version": "1.0.0",
+  "description": "Minimal NodeJS server to handle matchmaking and signaling for P2P WebRTC multiplayer games",
+  "homepage": "https://github.com/Switchbreak/webrtc-signaling-server#readme",
+  "bugs": {
+    "url": "https://github.com/Switchbreak/webrtc-signaling-server/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Switchbreak/webrtc-signaling-server.git"
+  },
+  "license": "MIT",
+  "author": "Octree",
+  "type": "commonjs",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "dependencies": {
+    "ws": "^8.18.2"
+  }
+}
