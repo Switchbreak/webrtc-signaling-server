@@ -1,6 +1,8 @@
+const Config = require('./config');
 const WebSocket = require('ws');
 const Crypto = require('crypto');
 const rateLimit = require('ws-rate-limit')('10s', 256);
+const Winston = require('winston');
 
 const MESSAGE_TYPE = {
     SET_ID: 0,
@@ -19,20 +21,21 @@ const CLOSE_CODES = {
     FORBIDDEN: 3003,
 };
 
-
-const MAX_PEERS = 4096;
-const PING_INTERVAL = 10000;
 const LOBBY_ID_LENGTH = 6;
 const LOBBY_ID_CHARS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
-const MAX_LOBBY_SIZE = 10;
-const LISTEN_PORT = 7000;
 
-const wss = new WebSocket.Server({ port: LISTEN_PORT });
+const logger = Winston.createLogger({
+    level: 'info',
+    format: Winston.format.simple(),
+    transports: [new Winston.transports.Console()],
+})
+
+const wss = new WebSocket.Server({ port: Config.LISTEN_PORT });
 const peers = new Map();
 const lobbies = new Map();
 
 wss.on('listening', () => {
-    console.log('Listening on port ', LISTEN_PORT);
+    logger.info('Listening on port %d', Config.LISTEN_PORT });
 });
 
 wss.on('close', () => {
@@ -40,11 +43,11 @@ wss.on('close', () => {
 });
 
 wss.on('connection', (ws, req) => {
-    console.log('Connection received');
+    logger.debug('Connection received');
     rateLimit(ws);
 
-    if (peers.size >= MAX_PEERS) {
-        console.log('Too many peers connected');
+    if (peers.size >= Config.MAX_PEERS) {
+        logger.warn('Too many peers connected');
         ws.close(CLOSE_CODES.TRY_AGAIN_LATER, 'Too many peers connected');
         return;
     }
@@ -56,18 +59,18 @@ wss.on('connection', (ws, req) => {
     }
 
     ws.on('message', (message) => {
-        console.log('Packet received: ', message);
+        logger.debug('Packet received', message);
         handlePeerMessage(id, message);
     });
     ws.on('close', (code, reason) => {
-        console.log(`Connection closed with reason: ${code} - ${reason}`);
+        logger.info('Connection closed with reason: %d - %s', code, reason);
         disconnectPeer(id);
     });
     ws.on('error', (error) => {
-        console.error(error);
+        logger.error(error);
     });
     ws.on('limited', () => {
-        console.error('Too many requests, exceeded rate limit from IP: ', req.socket.remoteAddress);
+        logger.error('Too many requests, exceeded rate limit from IP: %s', req.socket.remoteAddress);
     })
 });
 
@@ -75,7 +78,7 @@ const interval = setInterval(() => {
     wss.clients.forEach((ws) => {
         ws.ping();
     });
-}, PING_INTERVAL);
+}, Config.PING_INTERVAL);
 
 process.on('SIGINT', () => {
     shutdown();
@@ -90,7 +93,7 @@ function shutdown() {
     }
 
     wss.close();
-    console.log('Server closed');
+    logger.info('Server closed');
 
     process.exit();
 }
@@ -140,7 +143,7 @@ function leaveLobby(peer) {
         if (lobby) {
             lobby.peers.delete(peer.id);
             if (!lobby.peers.size) {
-                console.log(`Lobby ${lobby.id} is empty, closing`)
+                logger.info('Lobby %s is empty, closing', lobby.id)
                 lobbies.delete(lobby.id);
             }
         }
@@ -151,7 +154,7 @@ function joinLobby(id, req) {
     const peer = peers.get(id);
 
     // Lobby ID is stored in the URL of the connection request - e.g. wss://localhost:7000/{lobby-id}
-    console.log('Request URL: ', req.url);
+    logger.debug('Request URL: %s', req.url);
     let lobbyId = null;
     if (req.url.length > 1) {
         lobbyId = req.url.substring(1);
@@ -159,7 +162,7 @@ function joinLobby(id, req) {
 
     if (lobbyId) {
         if (!validateLobbyId(lobbyId)) {
-            console.error('Invalid lobby ID: ', lobbyId);
+            logger.error('Invalid lobby ID: %s', lobbyId);
             peer.ws.close(CLOSE_CODES.INVALID_PAYLOAD, 'Invalid lobby ID');
             return;
         }
@@ -170,8 +173,8 @@ function joinLobby(id, req) {
 
     peer.lobbyId = lobbyId;
     const lobby = lobbies.get(lobbyId);
-    if (lobby.peers.size >= MAX_LOBBY_SIZE) {
-        console.error(`Lobby ${lobbyId} is full, closing connection`);
+    if (lobby.peers.size >= Config.MAX_LOBBY_SIZE) {
+        logger.error('Lobby %s is full, closing connection', lobbyId);
         peer.ws.close(CLOSE_CODES.FORBIDDEN, 'Lobby is full');
         return;
     }
@@ -212,7 +215,7 @@ function createLobby() {
         'peers': new Map(),
     })
 
-    console.log('Created new lobby: ', lobbyId);
+    logger.info('Created new lobby: %s', lobbyId);
 
     return lobbyId;
 }
@@ -221,9 +224,9 @@ function handlePeerMessage(fromId, packet) {
     const from = peers.get(fromId);
 
     const message = JSON.parse(packet);
-    console.log('Parsed message: ', message);
+    logger.debug('Parsed message: ', message);
     if (!validateMessage(message)) {
-        console.error("Received invalid message from peer, closing connection");
+        logger.error("Received invalid message from peer, closing connection");
         from.ws.close(CLOSE_CODES.INVALID_PAYLOAD, 'Invalid message received');
         return;
     }
@@ -234,7 +237,7 @@ function handlePeerMessage(fromId, packet) {
         // Forward other message types on to the destination peer
         const dest = peers.get(message.peer_index);
         if (!dest || dest.lobbyId != from.lobbyId) {
-            console.error('Destination peer is not in the same lobby');
+            logger.error('Destination peer is not in the same lobby');
             from.ws.close(CLOSE_CODES.UNAUTHORIZED, 'Destination peer is not in the same lobby');
             return;
         }
@@ -285,7 +288,7 @@ function handlePeerConnection(fromId, message) {
     from.name = message.data.name;
 
     const lobby = lobbies.get(from.lobbyId);
-    console.log('Lobby: ', lobby);
+    logger.debug('Lobby: ', lobby);
     lobby.peers.forEach((dest, destId) => {
         if (destId != fromId) {
             // Signal new peer to receive connection offer from existing peer
@@ -312,6 +315,6 @@ function sendPeerMessage(peer, type, fromId, data) {
         'peer_index': fromId,
         'data': data,
     });
-    console.log('Sending packet: ', packet);
+    logger.debug('Sending packet: ', packet);
     peer.ws.send(packet);
 }

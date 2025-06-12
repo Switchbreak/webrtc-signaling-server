@@ -1,0 +1,7 @@
+module.exports = {
+    LISTEN_PORT: 7000,
+    MAX_PEERS: 4096,
+    PING_INTERVAL: 10000,
+    MAX_LOBBY_SIZE: 10,
+    RATE_LIMIT: 256,
+}
