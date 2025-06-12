@@ -25,7 +25,7 @@ const LOBBY_ID_LENGTH = 6;
 const LOBBY_ID_CHARS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
 
 const logger = Winston.createLogger({
-    level: 'info',
+    level: 'debug',
     format: Winston.format.combine(Winston.format.colorize(), Winston.format.splat(), Winston.format.simple()),
     transports: [new Winston.transports.Console()],
 })
@@ -59,7 +59,7 @@ wss.on('connection', (ws, req) => {
     }
 
     ws.on('message', (message) => {
-        logger.debug('Packet received', message);
+        logger.debug('Packet received: %s', message);
         handlePeerMessage(id, message);
     });
     ws.on('close', (code, reason) => {
@@ -285,10 +285,12 @@ function validateMessage(message) {
 
 function handlePeerConnection(fromId, message) {
     const from = peers.get(fromId);
-    from.name = message.data.name;
 
     const lobby = lobbies.get(from.lobbyId);
     logger.debug('Lobby: ', lobby);
+
+    setPlayerName(message, lobby, from);
+
     lobby.peers.forEach((dest, destId) => {
         if (destId != fromId) {
             // Signal new peer to receive connection offer from existing peer
@@ -309,12 +311,25 @@ function handlePeerConnection(fromId, message) {
     });
 }
 
+function setPlayerName(message, lobby, from) {
+    let player_name = message.data.name;
+    let iterator = 1;
+    while (lobby.peers.values().some((peer) => {
+        return peer.id != from.id && peer.name == player_name;
+    })) {
+        player_name = `${message.data.name} (${iterator})`;
+        iterator++;
+    }
+    logger.debug('Player name: %s', player_name);
+    from.name = player_name;
+}
+
 function sendPeerMessage(peer, type, fromId, data) {
     const packet = JSON.stringify({
         'type': type,
         'peer_index': fromId,
         'data': data,
     });
-    logger.debug('Sending packet: ', packet);
+    logger.debug('Sending packet: %s', packet);
     peer.ws.send(packet);
 }
