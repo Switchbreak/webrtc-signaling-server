@@ -1,6 +1,6 @@
-const WebSocket = require('ws')
+const WebSocket = require('ws');
 const Crypto = require('crypto');
-const { send } = require('process');
+const rateLimit = require('ws-rate-limit')('10s', 256);
 
 const MESSAGE_TYPE = {
     SET_ID: 0,
@@ -29,6 +29,7 @@ wss.on('close', (ws) => {
 
 wss.on('connection', (ws, req) => {
     console.log('Connection received');
+    rateLimit(ws);
 
     if (peers.size >= MAX_PEERS) {
         console.log('Too many peers connected');
@@ -53,6 +54,9 @@ wss.on('connection', (ws, req) => {
     ws.on('error', (error) => {
         console.error(error);
     });
+    ws.on('limited', () => {
+        console.error('Too many requests, exceeded rate limit');
+    })
 });
 
 const interval = setInterval(() => {
