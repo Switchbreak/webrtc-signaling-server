@@ -1,7 +1,7 @@
 const Config = require('./config');
 const WebSocket = require('ws');
 const Crypto = require('crypto');
-const rateLimit = require('ws-rate-limit')('10s', 256);
+const rateLimit = require('ws-rate-limit')('10s', Config.RATE_LIMIT);
 const Winston = require('winston');
 
 const MESSAGE_TYPE = {
@@ -35,7 +35,7 @@ const peers = new Map();
 const lobbies = new Map();
 
 wss.on('listening', () => {
-    logger.info('Listening on port %d', Config.LISTEN_PORT });
+    logger.info('Listening on port %d', Config.LISTEN_PORT);
 });
 
 wss.on('close', () => {
@@ -202,7 +202,7 @@ function validateLobbyId(lobbyId) {
 }
 
 function createLobby() {
-    var lobbyId;
+    let lobbyId;
     do {
         lobbyId = '';
         for(let i = 0; i < LOBBY_ID_LENGTH; i++) {
