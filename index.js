@@ -12,9 +12,12 @@ const MESSAGE_TYPE = {
 };
 
 const MAX_PEERS = 4096;
+const LOBBY_ID_LENGTH = 6;
+const LOBBY_ID_CHARS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
 
 const wss = new WebSocket.Server({ port: 7000 });
 const peers = new Map();
+const lobbies = new Map();
 
 wss.on('listening', () => {
     console.log('Listening on port 7000');
@@ -24,7 +27,7 @@ wss.on('close', (ws) => {
     console.log('Server closed');
 });
 
-wss.on('connection', (ws) => {
+wss.on('connection', (ws, req) => {
     console.log('Connection received');
 
     if (peers.size >= MAX_PEERS) {
@@ -34,6 +37,10 @@ wss.on('connection', (ws) => {
     }
 
     const id = connectPeer(ws);
+    const lobbyId = joinLobby(id, req);
+    if (lobbyId) {
+        setPeerId(id);
+    }
 
     ws.on('message', (message) => {
         console.log('Packet received: ', message);
@@ -62,28 +69,116 @@ function connectPeer(ws) {
         id,
         name: 'Player',
         isHost: peers.size == 0,
+        lobbyId: '',
     };
     peers.set(id, peer);
-
-    sendPeerMessage(peer, MESSAGE_TYPE.SET_ID, id);
 
     return id;
 }
 
 function disconnectPeer(id) {
+    const peer = peers.get(id);
+    peer.ws.close();
+
+    leaveLobby(peer);
     peers.delete(id);
 
-    for (const peer of peers.values()) {
-        sendPeerMessage(peer, MESSAGE_TYPE.PEER_DISCONNECT, id);
+    const lobby = lobbies.get(peer.lobbyId)
+    if (lobby) {
+        for (const peer of lobby.peers.values()) {
+            sendPeerMessage(peer, MESSAGE_TYPE.PEER_DISCONNECT, id);
+        }
     }
 }
 
+function setPeerId(id) {
+    const peer = peers.get(id);
+
+    sendPeerMessage(peer, MESSAGE_TYPE.SET_ID, id, { 'lobby_id': peer.lobbyId });
+}
+
+function leaveLobby(peer) {
+    if (peer.lobbyId) {
+        const lobby = lobbies.get(peer.lobbyId);
+
+        lobby.peers.delete(peer.id);
+        if (!lobby.peers.size) {
+            console.log(`Lobby ${lobby.id} is empty, closing`)
+            lobbies.delete(lobby.id);
+        }
+    }
+}
+
+function joinLobby(id, req) {
+    const peer = peers.get(id);
+
+    // Lobby ID is stored in the URL of the connection request - e.g. wss://localhost:7000/{lobby-id}
+    console.log('Request URL: ', req.url);
+    if (req.url.length > 1) {
+        var lobbyId = req.url.substring(1);
+    }
+
+    if (lobbyId) {
+        if (!validateLobbyId(lobbyId)) {
+            console.error('Invalid lobby ID: ', lobbyId);
+            peer.ws.close(1007, 'Invalid lobby ID');
+            return;
+        }
+    } else {
+        lobbyId = createLobby();
+    }
+
+    peer.lobbyId = lobbyId;
+    lobbies.get(lobbyId).peers.set(id, peer);
+
+    return lobbyId;
+}
+
+function validateLobbyId(lobbyId) {
+    if (lobbyId.length != LOBBY_ID_LENGTH) {
+        return false;
+    }
+
+    for (const char of lobbyId) {
+        if (!LOBBY_ID_CHARS.includes(char)) {
+            return false;
+        }
+    }
+
+    if (!lobbies.has(lobbyId)) {
+        return false;
+    }
+
+    return true;
+}
+
+function createLobby() {
+    var lobbyId;
+    do {
+        lobbyId = '';
+        for(let i = 0; i < LOBBY_ID_LENGTH; i++) {
+            lobbyId += LOBBY_ID_CHARS[Crypto.randomInt(0, LOBBY_ID_CHARS.length)];
+        }
+    } while (lobbies.has(lobbyId));
+
+    lobbies.set(lobbyId, {
+        'id': lobbyId,
+        'peers': new Map(),
+    })
+
+    console.log('Created new lobby: ', lobbyId);
+
+    return lobbyId;
+}
+
 function handlePeerMessage(fromId, packet) {
-    var message = JSON.parse(packet);
+    const from = peers.get(fromId);
+
+    const message = JSON.parse(packet);
     console.log('Parsed message: ', message);
     if (!validateMessage(message)) {
         console.error("Received invalid message from peer, closing connection");
-        disconnectPeer(fromId);
+        from.ws.close(1007, 'Invalid message received');
         return;
     }
 
@@ -91,7 +186,14 @@ function handlePeerMessage(fromId, packet) {
         handlePeerConnection(fromId, message);
     } else {
         // Forward other message types on to the destination peer
+        const from = peers.get(fromId);
         const dest = peers.get(message.peer_index);
+        if (dest.lobbyId != from.lobbyId) {
+            console.error('Destination peer is not in the same lobby');
+            from.ws.close(3000, 'Destination peer is not in the same lobby');
+            return;
+        }
+
         sendPeerMessage(dest, message.type, fromId, message.data);
     }
 }
@@ -127,7 +229,9 @@ function handlePeerConnection(fromId, message) {
     const from = peers.get(fromId);
     from.name = message.data.name;
 
-    peers.forEach((dest, destId) => {
+    const lobby = lobbies.get(from.lobbyId);
+    console.log('Lobby: ', lobby);
+    lobby.peers.forEach((dest, destId) => {
         if (destId != fromId) {
             // Signal new peer to receive connection offer from existing peer
             sendPeerMessage(
