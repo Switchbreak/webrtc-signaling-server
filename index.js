@@ -67,7 +67,7 @@ wss.on('connection', (ws, req) => {
         console.error(error);
     });
     ws.on('limited', () => {
-        console.error('Too many requests, exceeded rate limit');
+        console.error('Too many requests, exceeded rate limit from IP: ', req.socket.remoteAddress);
     })
 });
 
