@@ -82,6 +82,9 @@ function connectPeer(ws) {
 
 function disconnectPeer(id) {
     const peer = peers.get(id);
+    if (!peer) {
+        return;
+    }
     peer.ws.close();
 
     leaveLobby(peer);
@@ -204,27 +207,37 @@ function handlePeerMessage(fromId, packet) {
 }
 
 function validateMessage(message) {
-    if ('type' in message) {
-        if (typeof message.type != "number") {
-            return false;
-        }
-        if (!Object.values(MESSAGE_TYPE).includes(message.type)) {
-            return false;
-        }
-    } else {
+    if (typeof message != "object") {
         return false;
     }
 
-    if ('peer_index' in message) {
-        if (typeof message.peer_index != "string") {
-            return false;
-        }
-    } else {
+    if (!('type' in message)) {
+        return false;
+    }
+    if (typeof message.type != "number") {
+        return false;
+    }
+    if (!Object.values(MESSAGE_TYPE).includes(message.type)) {
         return false;
     }
 
-    if (!'data' in message) {
+    if (!('peer_index' in message)) {
         return false;
+    }
+    if (typeof message.peer_index != "string") {
+        return false;
+    }
+
+    if (!('data' in message)) {
+        return false;
+    }
+    if (message.type == MESSAGE_TYPE.PEER_CONNECT) {
+    if (typeof message.data != "object") {
+        return false;
+    }
+        if (!('name' in message.data)) {
+            return false;
+        }
     }
 
     return true;
