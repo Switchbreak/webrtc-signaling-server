@@ -11,6 +11,8 @@ const MESSAGE_TYPE = {
     CANDIDATE: 5,
 };
 
+const MAX_PEERS = 4096;
+
 const wss = new WebSocket.Server({ port: 7000 });
 const peers = new Map();
 
@@ -24,6 +26,13 @@ wss.on('close', (ws) => {
 
 wss.on('connection', (ws) => {
     console.log('Connection received');
+
+    if (peers.size >= MAX_PEERS) {
+        console.log('Too many peers connected');
+        ws.close(1013, 'Too many peers connected');
+        return;
+    }
+
     const id = connectPeer(ws);
 
     ws.on('message', (message) => {
@@ -52,12 +61,11 @@ function connectPeer(ws) {
         ws,
         id,
         name: 'Player',
-        isIdSet: false,
         isHost: peers.size == 0,
     };
     peers.set(id, peer);
 
-    setPeerId(peer, id);
+    sendPeerMessage(peer, MESSAGE_TYPE.SET_ID, id);
 
     return id;
 }
@@ -137,11 +145,6 @@ function handlePeerConnection(fromId, message) {
             sendPeerMessage(dest, MESSAGE_TYPE.PEER_CONNECT, fromId, message.data);
         }
     });
-}
-
-function setPeerId(peer, id) {
-    peer.isIdSet = true;
-    sendPeerMessage(peer, MESSAGE_TYPE.SET_ID, id);
 }
 
 function sendPeerMessage(peer, type, fromId, data) {
