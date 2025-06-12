@@ -68,7 +68,7 @@ const interval = setInterval(() => {
 function connectPeer(ws) {
     const id = Crypto.randomUUID();
 
-    var peer = {
+    const peer = {
         ws,
         id,
         name: 'Player',
@@ -118,8 +118,9 @@ function joinLobby(id, req) {
 
     // Lobby ID is stored in the URL of the connection request - e.g. wss://localhost:7000/{lobby-id}
     console.log('Request URL: ', req.url);
+    let lobbyId = null;
     if (req.url.length > 1) {
-        var lobbyId = req.url.substring(1);
+        lobbyId = req.url.substring(1);
     }
 
     if (lobbyId) {
