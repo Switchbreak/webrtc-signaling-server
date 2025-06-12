@@ -23,8 +23,8 @@ wss.on('listening', () => {
     console.log('Listening on port 7000');
 });
 
-wss.on('close', (ws) => {
-    console.log('Server closed');
+wss.on('close', () => {
+    shutdown();
 });
 
 wss.on('connection', (ws, req) => {
@@ -65,6 +65,24 @@ const interval = setInterval(() => {
     });
 }, 10000);
 
+process.on('SIGINT', () => {
+    shutdown();
+});
+process.on('SIGTERM', () => {
+    shutdown();
+});
+
+function shutdown() {
+    for(const peer of peers.values()) {
+        peer.ws.close(1001, 'Server closed');
+    }
+
+    wss.close();
+    console.log('Server closed');
+
+    process.exit();
+}
+
 function connectPeer(ws) {
     const id = Crypto.randomUUID();
 
@@ -85,7 +103,6 @@ function disconnectPeer(id) {
     if (!peer) {
         return;
     }
-    peer.ws.close();
 
     leaveLobby(peer);
     peers.delete(id);
@@ -232,9 +249,9 @@ function validateMessage(message) {
         return false;
     }
     if (message.type == MESSAGE_TYPE.PEER_CONNECT) {
-    if (typeof message.data != "object") {
-        return false;
-    }
+        if (typeof message.data != "object") {
+            return false;
+        }
         if (!('name' in message.data)) {
             return false;
         }
