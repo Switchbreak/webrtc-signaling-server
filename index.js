@@ -14,6 +14,7 @@ const MESSAGE_TYPE = {
 const MAX_PEERS = 4096;
 const LOBBY_ID_LENGTH = 6;
 const LOBBY_ID_CHARS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+const MAX_LOBBY_SIZE = 10;
 
 const wss = new WebSocket.Server({ port: 7000 });
 const peers = new Map();
@@ -154,7 +155,13 @@ function joinLobby(id, req) {
     }
 
     peer.lobbyId = lobbyId;
-    lobbies.get(lobbyId).peers.set(id, peer);
+    const lobby = lobbies.get(lobbyId);
+    if (lobby.peers.size >= MAX_LOBBY_SIZE) {
+        console.error(`Lobby ${lobbyId} is full, closing connection`);
+        peer.ws.close(3003, 'Lobby is full');
+        return;
+    }
+    lobby.peers.set(id, peer);
 
     return lobbyId;
 }
