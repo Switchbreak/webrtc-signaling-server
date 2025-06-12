@@ -102,7 +102,7 @@ function connectPeer(ws) {
         ws,
         id,
         name: 'Player',
-        isHost: peers.size == 0,
+        isHost: false,
         lobbyId: '',
     };
     peers.set(id, peer);
@@ -165,6 +165,7 @@ function joinLobby(id, req) {
         }
     } else {
         lobbyId = createLobby();
+        peer.isHost = true;
     }
 
     peer.lobbyId = lobbyId;
