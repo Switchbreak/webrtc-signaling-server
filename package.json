@@ -18,6 +18,7 @@
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "dependencies": {
+    "winston": "^3.17.0",
     "ws": "^8.18.2",
     "ws-rate-limit": "^0.0.0"
   }

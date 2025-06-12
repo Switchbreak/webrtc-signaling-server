@@ -26,7 +26,7 @@ const LOBBY_ID_CHARS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123
 
 const logger = Winston.createLogger({
     level: 'info',
-    format: Winston.format.simple(),
+    format: Winston.format.combine(Winston.format.colorize(), Winston.format.splat(), Winston.format.simple()),
     transports: [new Winston.transports.Console()],
 })
 
