@@ -24,11 +24,7 @@ const CLOSE_CODES = {
 const LOBBY_ID_LENGTH = 6;
 const LOBBY_ID_CHARS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
 
-const logger = Winston.createLogger({
-    level: 'debug',
-    format: Winston.format.combine(Winston.format.colorize(), Winston.format.splat(), Winston.format.simple()),
-    transports: [new Winston.transports.Console()],
-})
+const logger = initLogger();
 
 const wss = new WebSocket.Server({ port: Config.LISTEN_PORT });
 const peers = new Map();
@@ -86,6 +82,19 @@ process.on('SIGINT', () => {
 process.on('SIGTERM', () => {
     shutdown();
 });
+
+function initLogger() {
+    const logger = Winston.createLogger(Config.logger);
+
+    if (process.env.NODE_ENV !== 'production') {
+        logger.add(new Winston.transports.Console({
+            level: 'debug',
+            format: Winston.format.combine(Winston.format.colorize(), Winston.format.splat(), Winston.format.simple()),
+        }));
+    }
+    
+    return logger;
+}
 
 function shutdown() {
     for(const peer of peers.values()) {
